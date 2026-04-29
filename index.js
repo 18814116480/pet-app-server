@@ -72,10 +72,20 @@ app.get("/api/user/info", async (req, res) => {
       });
     }
 
+    const userData = user.toJSON();
+    // 格式化 createdAt 时间，如 2023-10-01
+    if (userData.createdAt) {
+      const date = new Date(userData.createdAt);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      userData.joinTime = `${year}-${month}-${day}`;
+    }
+
     res.json({
       code: 200,
       message: '获取成功',
-      data: user
+      data: userData
     });
   } catch (error) {
     console.error("获取用户信息失败:", error);
@@ -107,10 +117,19 @@ app.post("/api/user/info", async (req, res) => {
       introduction: introduction !== undefined ? introduction : user.introduction
     });
 
+    const userData = user.toJSON();
+    if (userData.createdAt) {
+      const date = new Date(userData.createdAt);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      userData.joinTime = `${year}-${month}-${day}`;
+    }
+
     res.json({
       code: 200,
       message: '更新成功',
-      data: user
+      data: userData
     });
   } catch (error) {
     console.error("更新用户信息失败:", error);
