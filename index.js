@@ -49,6 +49,60 @@ app.get("/api/wx_openid", async (req, res) => {
   }
 });
 
+// 获取宠物列表数据（模拟真实数据库返回）
+app.get("/api/pets", (req, res) => {
+  res.json({
+    code: 200,
+    message: '请求成功',
+    data: [
+      {
+        id: '1',
+        url: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
+        nickname: '小花',
+        breed: '中华田园猫',
+        age: '3个月',
+        gender: 'female',
+        location: '四川省成都市武侯区人民南路',
+        tags: ['活泼好动', '亲人'],
+        status: '寻找中'
+      },
+      {
+        id: '2',
+        url: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
+        nickname: '旺财',
+        breed: '金毛',
+        age: '1岁',
+        gender: 'male',
+        location: '四川省成都市武侯区天府大道1号',
+        tags: ['看家护院', '忠诚'],
+        status: '寻找中'
+      },
+      {
+        id: '3',
+        url: 'https://images.unsplash.com/photo-1552053831-71594a27632d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
+        nickname: '豆豆',
+        breed: '哈士奇',
+        age: '2岁',
+        gender: 'male',
+        location: '四川省成都市武侯区高新西区',
+        tags: ['温顺'],
+        status: '寻找中'
+      },
+      {
+        id: '4',
+        url: 'https://images.unsplash.com/photo-1529429617124-95b109e86bb8?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
+        nickname: '小白',
+        breed: '萨摩耶',
+        age: '1岁',
+        gender: 'female',
+        location: '四川省成都市武侯区高新南区',
+        tags: ['会定点', '亲人'],
+        status: '寻找中'
+      }
+    ]
+  });
+});
+
 const port = process.env.PORT || 80;
 
 async function bootstrap() {
