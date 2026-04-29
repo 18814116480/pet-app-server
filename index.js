@@ -145,6 +145,63 @@ app.post("/api/pets", async (req, res) => {
   }
 });
 
+// 获取单个宠物详情接口
+app.get("/api/pets/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pet = await Pet.findByPk(id);
+
+    if (!pet) {
+      return res.status(404).json({
+        code: 404,
+        message: '未找到该宠物'
+      });
+    }
+
+    res.json({
+      code: 200,
+      message: '请求成功',
+      data: pet
+    });
+  } catch (error) {
+    console.error("查询宠物详情失败:", error);
+    res.status(500).json({
+      code: 500,
+      message: '查询失败，服务器错误',
+      error: error.message
+    });
+  }
+});
+
+// 删除单个宠物接口
+app.delete("/api/pets/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pet = await Pet.findByPk(id);
+
+    if (!pet) {
+      return res.status(404).json({
+        code: 404,
+        message: '未找到该宠物'
+      });
+    }
+
+    await pet.destroy();
+
+    res.json({
+      code: 200,
+      message: '删除成功'
+    });
+  } catch (error) {
+    console.error("删除宠物失败:", error);
+    res.status(500).json({
+      code: 500,
+      message: '删除失败，服务器错误',
+      error: error.message
+    });
+  }
+});
+
 const port = process.env.PORT || 80;
 
 async function bootstrap() {
