@@ -149,19 +149,33 @@ app.delete("/api/user/account", async (req, res) => {
   try {
     const openid = req.headers["x-wx-openid"] || 'mock_user_id';
     
-    // 1. 删除用户记录
-    const deletedUserCount = await User.destroy({ where: { openid } });
-    if (deletedUserCount === 0) {
+    // 查询用户信息，获取其 accountId，以便全面清除数据
+    const user = await User.findOne({ where: { openid } });
+    if (!user) {
       return res.status(404).json({ code: 404, message: '账号不存在或已注销' });
     }
 
-    // 2. 这里可以根据业务需求决定是否级联删除用户发布的宠物和收藏
-    // 比如：
-    // await Pet.destroy({ where: { publisherId: openid } }); // 但需要注意我们的 publisherId 存的是 accountId
+    // 1. 删除该用户发布的所有宠物（同时兼容 openid 和 accountId 两种错误/正确情况）
+    await Pet.destroy({
+      where: {
+        [Op.or]: [
+          { publisherId: openid },
+          { publisherId: user.accountId }
+        ]
+      }
+    });
+
+    // 2. 删除该用户的所有收藏记录
+    await Collect.destroy({
+      where: { userId: openid }
+    });
+
+    // 3. 删除用户记录
+    await User.destroy({ where: { openid } });
     
     res.json({
       code: 200,
-      message: '账号注销成功'
+      message: '账号注销成功，相关数据已清空'
     });
   } catch (error) {
     console.error("账号注销失败:", error);
