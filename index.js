@@ -170,7 +170,17 @@ app.delete("/api/user/account", async (req, res) => {
       where: { userId: openid }
     });
 
-    // 3. 删除用户记录
+    // 3. 删除该用户相关的聊天会话记录
+    await Message.destroy({
+      where: {
+        [Op.or]: [
+          { senderId: user.accountId },
+          { receiverId: user.accountId }
+        ]
+      }
+    });
+
+    // 4. 删除用户记录
     await User.destroy({ where: { openid } });
     
     res.json({
@@ -312,6 +322,45 @@ function checkBanStatus(userPerms, action) {
   return false;
 }
 
+// 容器启动时自动清理和修复历史数据
+setTimeout(async () => {
+  try {
+    const allUsers = await User.findAll({ attributes: ['openid', 'accountId'] });
+    const validIds = new Set();
+    const accountIdToOpenid = new Map();
+
+    allUsers.forEach(u => {
+      if (u.openid) validIds.add(u.openid);
+      if (u.accountId) {
+        validIds.add(u.accountId);
+        accountIdToOpenid.set(u.accountId, u.openid); // 记录映射关系，用于修复数据
+      }
+    });
+
+    const allPets = await Pet.findAll({ attributes: ['id', 'publisherId'] });
+    const orphanPetIds = [];
+
+    for (const p of allPets) {
+      if (!validIds.has(p.publisherId)) {
+        orphanPetIds.push(p.id);
+      } else if (accountIdToOpenid.has(p.publisherId)) {
+        // 如果 publisherId 存成了 accountId (历史 Bug)，修复为 openid 以保证关联查询正常
+        const correctOpenid = accountIdToOpenid.get(p.publisherId);
+        await Pet.update({ publisherId: correctOpenid }, { where: { id: p.id } });
+        console.log(`[自动修复] 已将宠物 ${p.id} 的 publisherId 从 accountId 修复为 openid`);
+      }
+    }
+
+    if (orphanPetIds.length > 0) {
+      await Pet.destroy({ where: { id: orphanPetIds } });
+      await Collect.destroy({ where: { petId: orphanPetIds } });
+      console.log(`[自动清理] 容器启动时已批量删除孤儿宠物及关联数据，数量: ${orphanPetIds.length}`);
+    }
+  } catch(err) {
+    console.error("启动时维护数据失败:", err);
+  }
+}, 3000);
+
 // 获取宠物列表数据（从真实 MySQL 数据库查询）
 app.get("/api/pets", async (req, res) => {
   try {
@@ -333,7 +382,7 @@ app.get("/api/pets", async (req, res) => {
     const pets = await Pet.findAll({
       where,
       order: [['createdAt', 'DESC']],
-      include: [{ model: User }] // 关联查询发布者信息
+      include: [{ model: User, required: true }] // 关联查询发布者信息，使用 inner join 确保孤儿数据不返回
     });
     
     // 如果数据库里一条数据都没有，自动插入几条测试数据以便我们看到效果
