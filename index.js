@@ -145,10 +145,34 @@ app.post("/api/pets", async (req, res) => {
   }
 });
 
+// 获取我的发布接口 (暂时查所有，后续可根据 openid 或 userid 过滤)
+app.get("/api/pets/my", async (req, res) => {
+  try {
+    const pets = await Pet.findAll({
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.json({
+      code: 200,
+      message: '请求成功',
+      data: pets
+    });
+  } catch (error) {
+    console.error("查询我的发布失败:", error);
+    res.status(500).json({
+      code: 500,
+      message: '查询失败，服务器错误',
+      error: error.message
+    });
+  }
+});
+
 // 获取单个宠物详情接口
 app.get("/api/pets/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.headers["x-wx-openid"] || 'mock_user_id'; // 获取当前用户ID
+
     const pet = await Pet.findByPk(id);
 
     if (!pet) {
@@ -158,10 +182,22 @@ app.get("/api/pets/:id", async (req, res) => {
       });
     }
 
+    // 查询当前用户是否已收藏该宠物
+    const collect = await Collect.findOne({
+      where: {
+        userId,
+        petId: id
+      }
+    });
+
+    // 返回数据时附带收藏状态
+    const petData = pet.toJSON();
+    petData.isCollected = !!collect;
+
     res.json({
       code: 200,
       message: '请求成功',
-      data: pet
+      data: petData
     });
   } catch (error) {
     console.error("查询宠物详情失败:", error);
@@ -187,6 +223,11 @@ app.delete("/api/pets/:id", async (req, res) => {
     }
 
     await pet.destroy();
+    
+    // 同时删除与该宠物相关的收藏记录
+    await Collect.destroy({
+      where: { petId: id }
+    });
 
     res.json({
       code: 200,
@@ -199,6 +240,76 @@ app.delete("/api/pets/:id", async (req, res) => {
       message: '删除失败，服务器错误',
       error: error.message
     });
+  }
+});
+
+// 添加收藏接口
+app.post("/api/collects", async (req, res) => {
+  try {
+    const { petId } = req.body;
+    const userId = req.headers["x-wx-openid"] || 'mock_user_id';
+
+    if (!petId) {
+      return res.status(400).json({ code: 400, message: 'petId 不能为空' });
+    }
+
+    const [collect, created] = await Collect.findOrCreate({
+      where: { userId, petId },
+      defaults: { userId, petId }
+    });
+
+    res.json({
+      code: 200,
+      message: created ? '收藏成功' : '已经收藏过了',
+      data: collect
+    });
+  } catch (error) {
+    console.error("添加收藏失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误', error: error.message });
+  }
+});
+
+// 取消收藏接口
+app.delete("/api/collects/:petId", async (req, res) => {
+  try {
+    const { petId } = req.params;
+    const userId = req.headers["x-wx-openid"] || 'mock_user_id';
+
+    await Collect.destroy({
+      where: { userId, petId }
+    });
+
+    res.json({
+      code: 200,
+      message: '取消收藏成功'
+    });
+  } catch (error) {
+    console.error("取消收藏失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误', error: error.message });
+  }
+});
+
+// 获取我的收藏列表接口
+app.get("/api/collects/my", async (req, res) => {
+  try {
+    const userId = req.headers["x-wx-openid"] || 'mock_user_id';
+
+    const collects = await Collect.findAll({
+      where: { userId },
+      include: [{ model: Pet }] // 关联查询出宠物详情
+    });
+
+    // 格式化返回数据，只返回宠物信息数组
+    const pets = collects.map(c => c.Pet);
+
+    res.json({
+      code: 200,
+      message: '获取收藏列表成功',
+      data: pets
+    });
+  } catch (error) {
+    console.error("获取收藏列表失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误', error: error.message });
   }
 });
 

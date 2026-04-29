@@ -38,10 +38,21 @@ const Pet = sequelize.define("Pet", {
   desc: { type: DataTypes.TEXT, allowNull: true, comment: '描述信息' }
 });
 
+// 定义收藏模型
+const Collect = sequelize.define("Collect", {
+  userId: { type: DataTypes.STRING, allowNull: false, comment: '收藏者的用户ID' },
+  petId: { type: DataTypes.INTEGER, allowNull: false, comment: '被收藏的宠物ID' }
+});
+
+// 建立表关联：一个宠物可以被多次收藏
+Pet.hasMany(Collect, { foreignKey: 'petId' });
+Collect.belongsTo(Pet, { foreignKey: 'petId' });
+
 // 数据库初始化方法
 async function init() {
   await Counter.sync({ alter: true });
   await Pet.sync({ alter: true }); // 同步 Pet 表结构到数据库
+  await Collect.sync({ alter: true }); // 同步 Collect 表结构到数据库
 }
 
 // 导出初始化方法和模型
@@ -49,4 +60,5 @@ module.exports = {
   init,
   Counter,
   Pet,
+  Collect
 };
