@@ -2,7 +2,7 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
-const { init: initDB, Counter, Pet } = require("./db");
+const { init: initDB, Counter, Pet, Collect, User } = require("./db");
 
 const logger = morgan("tiny");
 
@@ -49,11 +49,105 @@ app.get("/api/wx_openid", async (req, res) => {
   }
 });
 
+// ---------------- 用户信息相关接口 ----------------
+
+// 获取个人信息
+app.get("/api/user/info", async (req, res) => {
+  try {
+    const openid = req.headers["x-wx-openid"] || 'mock_user_id';
+    let user = await User.findOne({ where: { openid } });
+    
+    if (!user) {
+      // 如果没有，则创建默认用户
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let accountId = '';
+      for (let i = 0; i < 8; i++) {
+        accountId += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      user = await User.create({
+        openid,
+        accountId,
+        nickname: '微信用户',
+        avatarUrl: 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'
+      });
+    }
+
+    res.json({
+      code: 200,
+      message: '获取成功',
+      data: user
+    });
+  } catch (error) {
+    console.error("获取用户信息失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误' });
+  }
+});
+
+// 更新个人信息
+app.post("/api/user/info", async (req, res) => {
+  try {
+    const openid = req.headers["x-wx-openid"] || 'mock_user_id';
+    const { nickname, avatarUrl, gender, birth, address, introduction } = req.body;
+    
+    const [user, created] = await User.findOrCreate({
+      where: { openid },
+      defaults: {
+        accountId: 'u_' + Date.now(),
+        nickname: nickname || '微信用户',
+        avatarUrl: avatarUrl || ''
+      }
+    });
+
+    await user.update({
+      nickname: nickname !== undefined ? nickname : user.nickname,
+      avatarUrl: avatarUrl !== undefined ? avatarUrl : user.avatarUrl,
+      gender: gender !== undefined ? gender : user.gender,
+      birth: birth !== undefined ? birth : user.birth,
+      address: address !== undefined ? address : user.address,
+      introduction: introduction !== undefined ? introduction : user.introduction
+    });
+
+    res.json({
+      code: 200,
+      message: '更新成功',
+      data: user
+    });
+  } catch (error) {
+    console.error("更新用户信息失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误' });
+  }
+});
+
+// 获取首页轮播图
+app.get("/api/home/swipers", async (req, res) => {
+  try {
+    // 这里简单起见，我们返回静态配置的轮播图。
+    // 后续你也可以在 MySQL 里新建一张 Swiper 表来管理它们。
+    const swipers = [
+      'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1543466835-00a7907e9de1?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'
+    ];
+    res.json({
+      code: 200,
+      message: '获取轮播图成功',
+      data: swipers
+    });
+  } catch (error) {
+    console.error("获取轮播图失败:", error);
+    res.status(500).json({
+      code: 500,
+      message: '服务器错误'
+    });
+  }
+});
+
 // 获取宠物列表数据（从真实 MySQL 数据库查询）
 app.get("/api/pets", async (req, res) => {
   try {
     const pets = await Pet.findAll({
-      order: [['createdAt', 'DESC']] // 按最新发布排序
+      order: [['createdAt', 'DESC']],
+      include: [{ model: User }] // 关联查询发布者信息
     });
     
     // 如果数据库里一条数据都没有，自动插入几条测试数据以便我们看到效果
@@ -107,7 +201,8 @@ app.get("/api/pets", async (req, res) => {
 // 发布宠物接口（写入 MySQL 数据库）
 app.post("/api/pets", async (req, res) => {
   try {
-    const { url, nickname, breed, age, gender, location, tags, status, desc } = req.body;
+    const { url, nickname, breed, age, gender, location, tags, status, desc, swiperList } = req.body;
+    const publisherId = req.headers["x-wx-openid"] || 'mock_user_id'; // 当前用户ID作为发布者
     
     // 简单的参数校验
     if (!nickname || !breed || !age) {
@@ -120,6 +215,7 @@ app.post("/api/pets", async (req, res) => {
     // 在数据库中创建新宠物记录
     const newPet = await Pet.create({
       url: url || 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80', // 默认图片
+      swiperList: swiperList || [url], // 如果前端传了轮播图数组就存下来
       nickname,
       breed,
       age,
@@ -127,7 +223,8 @@ app.post("/api/pets", async (req, res) => {
       location: location || '未知位置',
       tags: tags || [],
       status: status || '寻找中',
-      desc: desc || ''
+      desc: desc || '',
+      publisherId
     });
 
     res.json({
