@@ -31,6 +31,8 @@ const Pet = sequelize.define("Pet", {
   age: { type: DataTypes.STRING, allowNull: false, comment: '年龄' },
   gender: { type: DataTypes.STRING, allowNull: false, comment: '性别' },
   location: { type: DataTypes.STRING, allowNull: false, comment: '位置' },
+  latitude: { type: DataTypes.DOUBLE, allowNull: true, comment: '纬度' },
+  longitude: { type: DataTypes.DOUBLE, allowNull: true, comment: '经度' },
   tags: { 
     type: DataTypes.JSON, // 使用 JSON 存储数组 ['活泼好动', '亲人']
     allowNull: true,
