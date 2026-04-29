@@ -68,13 +68,30 @@ const User = sequelize.define("User", {
   permissions: { type: DataTypes.JSON, allowNull: true, defaultValue: {}, comment: '封禁权限(ban_publish, mute, ban_account)' }
 });
 
+// 定义聊天消息模型
+const Message = sequelize.define("Message", {
+  senderId: { type: DataTypes.STRING, allowNull: false, comment: '发送者 accountId' },
+  receiverId: { type: DataTypes.STRING, allowNull: false, comment: '接收者 accountId' },
+  content: { type: DataTypes.TEXT, allowNull: false, comment: '消息内容' },
+  msgType: { type: DataTypes.STRING, allowNull: false, defaultValue: 'text', comment: '消息类型: text, image, pet_card' },
+  isRead: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, comment: '是否已读' },
+  payload: { type: DataTypes.JSON, allowNull: true, comment: '附加数据，例如宠物卡片信息' },
+  isPinned: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, comment: '是否被置顶（由接收者置顶）' }
+});
+
 // 建立表关联：一个宠物可以被多次收藏
 Pet.hasMany(Collect, { foreignKey: 'petId' });
 Collect.belongsTo(Pet, { foreignKey: 'petId' });
 
-// 建立宠物和用户的关联（可选，但很有用）：一个用户发布多个宠物
+// 建立宠物和用户的关联
 User.hasMany(Pet, { foreignKey: 'publisherId', sourceKey: 'openid' });
 Pet.belongsTo(User, { foreignKey: 'publisherId', targetKey: 'openid' });
+
+// 建立消息和用户的关联
+User.hasMany(Message, { foreignKey: 'senderId', sourceKey: 'accountId', as: 'SentMessages' });
+User.hasMany(Message, { foreignKey: 'receiverId', sourceKey: 'accountId', as: 'ReceivedMessages' });
+Message.belongsTo(User, { foreignKey: 'senderId', targetKey: 'accountId', as: 'Sender' });
+Message.belongsTo(User, { foreignKey: 'receiverId', targetKey: 'accountId', as: 'Receiver' });
 
 // 数据库初始化方法
 async function init() {
@@ -82,6 +99,7 @@ async function init() {
   await User.sync({ alter: true }); // 同步 User 表结构到数据库
   await Pet.sync({ alter: true }); // 同步 Pet 表结构到数据库
   await Collect.sync({ alter: true }); // 同步 Collect 表结构到数据库
+  await Message.sync({ alter: true }); // 同步 Message 表结构到数据库
 }
 
 // 导出初始化方法和模型
@@ -90,5 +108,6 @@ module.exports = {
   Counter,
   Pet,
   Collect,
-  User
+  User,
+  Message
 };

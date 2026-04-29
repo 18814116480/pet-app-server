@@ -2,7 +2,7 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
-const { init: initDB, Counter, Pet, Collect, User } = require("./db");
+const { init: initDB, Counter, Pet, Collect, User, Message } = require("./db");
 const { Sequelize, Op } = require("sequelize");
 
 const logger = morgan("tiny");
@@ -630,6 +630,174 @@ app.get("/api/collects/my", async (req, res) => {
   } catch (error) {
     console.error("获取收藏列表失败:", error);
     res.status(500).json({ code: 500, message: '服务器错误', error: error.message });
+  }
+});
+
+// ---------------- 聊天相关接口 ----------------
+
+// 获取聊天会话列表
+app.get("/api/chat/sessions", async (req, res) => {
+  try {
+    const openid = req.headers["x-wx-openid"] || 'mock_user_id';
+    const user = await User.findOne({ where: { openid } });
+    if (!user) return res.status(404).json({ code: 404, message: '用户不存在' });
+
+    const myId = user.accountId;
+
+    // 获取所有与当前用户相关的消息
+    const messages = await Message.findAll({
+      where: {
+        [Op.or]: [{ senderId: myId }, { receiverId: myId }]
+      },
+      order: [['createdAt', 'ASC']]
+    });
+
+    const sessionsMap = {};
+    for (const msg of messages) {
+      const targetId = msg.senderId === myId ? msg.receiverId : msg.senderId;
+      if (!sessionsMap[targetId]) {
+        sessionsMap[targetId] = {
+          userId: targetId,
+          accountId: targetId,
+          messages: [],
+          isPinned: msg.isPinned && msg.receiverId === myId // 只有接收者置顶有效，这里简化为谁查询谁的置顶状态，但这需要更复杂的表结构。我们先简化处理。
+        };
+      }
+      sessionsMap[targetId].messages.push({
+        messageId: msg.id,
+        from: msg.senderId === myId ? 0 : 1,
+        content: msg.content,
+        msgType: msg.msgType,
+        time: new Date(msg.createdAt).getTime(),
+        read: msg.isRead,
+        payload: msg.payload
+      });
+    }
+
+    // 填充对方的用户信息
+    const sessions = Object.values(sessionsMap);
+    for (const session of sessions) {
+      const targetUser = await User.findOne({ where: { accountId: session.userId } });
+      session.name = targetUser ? (targetUser.nickname || '微信用户') : '未知用户';
+      session.avatar = targetUser ? targetUser.avatarUrl : '/static/avatar1.png';
+      
+      // 置顶状态应该由专门的设置表管理，这里为了快速兼容先默认 false
+      session.isPinned = false; 
+    }
+
+    // 按最新消息时间排序
+    sessions.sort((a, b) => {
+      const timeA = a.messages.length > 0 ? a.messages[a.messages.length - 1].time : 0;
+      const timeB = b.messages.length > 0 ? b.messages[b.messages.length - 1].time : 0;
+      return timeB - timeA;
+    });
+
+    res.json({ code: 200, data: sessions });
+  } catch (error) {
+    console.error("获取会话列表失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误' });
+  }
+});
+
+// 发送消息
+app.post("/api/chat/messages", async (req, res) => {
+  try {
+    const openid = req.headers["x-wx-openid"] || 'mock_user_id';
+    const sender = await User.findOne({ where: { openid } });
+    if (!sender) return res.status(404).json({ code: 404, message: '用户不存在' });
+
+    // 检查发送者是否被封禁账号
+    if (sender.permissions && checkBanStatus(sender.permissions, 'ban_account')) {
+      return res.status(403).json({ code: 403, message: '您的账号已被封禁，无法发送消息' });
+    }
+    // 检查发送者是否被禁言
+    if (sender.permissions && checkBanStatus(sender.permissions, 'mute')) {
+      return res.status(403).json({ code: 403, message: '您的账号已被禁言，无法发送消息' });
+    }
+
+    const { receiverId, content, msgType, payload } = req.body;
+    if (!receiverId || !content) {
+      return res.status(400).json({ code: 400, message: '缺少参数' });
+    }
+
+    const newMessage = await Message.create({
+      senderId: sender.accountId,
+      receiverId,
+      content,
+      msgType: msgType || 'text',
+      payload: payload || null,
+      isRead: false
+    });
+
+    res.json({
+      code: 200,
+      data: {
+        messageId: newMessage.id,
+        from: 0,
+        content: newMessage.content,
+        msgType: newMessage.msgType,
+        time: new Date(newMessage.createdAt).getTime(),
+        read: newMessage.isRead,
+        payload: newMessage.payload
+      }
+    });
+  } catch (error) {
+    console.error("发送消息失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误' });
+  }
+});
+
+// 标记消息为已读
+app.put("/api/chat/messages/read/:targetId", async (req, res) => {
+  try {
+    const openid = req.headers["x-wx-openid"] || 'mock_user_id';
+    const user = await User.findOne({ where: { openid } });
+    if (!user) return res.status(404).json({ code: 404, message: '用户不存在' });
+
+    const { targetId } = req.params;
+
+    // 把 targetId 发给我 (user.accountId) 的消息标记为已读
+    await Message.update(
+      { isRead: true },
+      {
+        where: {
+          senderId: targetId,
+          receiverId: user.accountId,
+          isRead: false
+        }
+      }
+    );
+
+    res.json({ code: 200, message: '标记已读成功' });
+  } catch (error) {
+    console.error("标记已读失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误' });
+  }
+});
+
+// 删除整个会话（双向物理删除，简化处理）
+app.delete("/api/chat/sessions/:targetId", async (req, res) => {
+  try {
+    const openid = req.headers["x-wx-openid"] || 'mock_user_id';
+    const user = await User.findOne({ where: { openid } });
+    if (!user) return res.status(404).json({ code: 404, message: '用户不存在' });
+
+    const { targetId } = req.params;
+    const myId = user.accountId;
+
+    await Message.destroy({
+      where: {
+        [Op.or]: [
+          { senderId: myId, receiverId: targetId },
+          { senderId: targetId, receiverId: myId }
+        ]
+      }
+    });
+
+    res.json({ code: 200, message: '会话已删除' });
+  } catch (error) {
+    console.error("删除会话失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误' });
   }
 });
 
