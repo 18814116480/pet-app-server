@@ -63,7 +63,9 @@ const User = sequelize.define("User", {
   birth: { type: DataTypes.STRING, allowNull: true, comment: '生日' },
   address: { type: DataTypes.JSON, allowNull: true, comment: '地址' },
   introduction: { type: DataTypes.TEXT, allowNull: true, comment: '简介' },
-  wechatId: { type: DataTypes.STRING, allowNull: true, comment: '微信号' }
+  wechatId: { type: DataTypes.STRING, allowNull: true, comment: '微信号' },
+  role: { type: DataTypes.STRING, allowNull: false, defaultValue: 'user', comment: '角色: user/admin' },
+  permissions: { type: DataTypes.JSON, allowNull: true, defaultValue: {}, comment: '封禁权限(ban_publish, mute, ban_account)' }
 });
 
 // 建立表关联：一个宠物可以被多次收藏

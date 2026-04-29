@@ -183,8 +183,100 @@ app.delete("/api/user/account", async (req, res) => {
   }
 });
 
-// 获取首页轮播图
-app.get("/api/home/swipers", async (req, res) => {
+// ---------------- 管理员相关接口 ----------------
+
+// 检查是否为管理员的中间件辅助函数
+async function isAdmin(openid) {
+  const user = await User.findOne({ where: { openid } });
+  return user && user.role === 'admin';
+}
+
+// 搜索用户 (管理员用)
+app.get("/api/admin/users", async (req, res) => {
+  try {
+    const openid = req.headers["x-wx-openid"] || 'mock_user_id';
+    if (!(await isAdmin(openid))) {
+      return res.status(403).json({ code: 403, message: '权限不足' });
+    }
+
+    const { searchId } = req.query;
+    if (!searchId) {
+      return res.status(400).json({ code: 400, message: '必须提供搜索ID' });
+    }
+
+    // 通过 accountId 搜索
+    const targetUser = await User.findOne({ where: { accountId: searchId } });
+    if (!targetUser) {
+      return res.status(404).json({ code: 404, message: '未找到该用户' });
+    }
+
+    // 格式化输出数据给前端管理员页面
+    const userData = targetUser.toJSON();
+    if (userData.createdAt) {
+      const date = new Date(userData.createdAt);
+      userData.joinTime = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+
+    // 计算年龄等如果需要
+    res.json({
+      code: 200,
+      message: '查找成功',
+      data: userData
+    });
+  } catch (error) {
+    console.error("管理员搜索用户失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误' });
+  }
+});
+
+// 设置/修改用户封禁权限 (管理员用)
+app.post("/api/admin/users/:accountId/permissions", async (req, res) => {
+  try {
+    const openid = req.headers["x-wx-openid"] || 'mock_user_id';
+    if (!(await isAdmin(openid))) {
+      return res.status(403).json({ code: 403, message: '权限不足' });
+    }
+
+    const { accountId } = req.params;
+    const { action, value } = req.body; // action: ban_publish/mute/ban_account, value: false/'permanent'/'YYYY-MM-DD'
+
+    const targetUser = await User.findOne({ where: { accountId } });
+    if (!targetUser) {
+      return res.status(404).json({ code: 404, message: '未找到目标用户' });
+    }
+
+    // 更新权限
+    const newPerms = targetUser.permissions || {};
+    if (value === false) {
+      delete newPerms[action];
+    } else {
+      newPerms[action] = value;
+    }
+
+    await targetUser.update({ permissions: newPerms });
+
+    // 如果是封禁账号操作，且不是解除限制，同时删除其所有发布的送养信息
+    if (action === 'ban_account' && value !== false) {
+      await Pet.destroy({
+        where: {
+          [Op.or]: [
+            { publisherId: targetUser.openid },
+            { publisherId: targetUser.accountId }
+          ]
+        }
+      });
+    }
+
+    res.json({
+      code: 200,
+      message: '操作成功',
+      data: newPerms
+    });
+  } catch (error) {
+    console.error("修改用户权限失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误' });
+  }
+});
   try {
     // 这里简单起见，我们返回静态配置的轮播图。
     // 后续你也可以在 MySQL 里新建一张 Swiper 表来管理它们。
@@ -206,6 +298,18 @@ app.get("/api/home/swipers", async (req, res) => {
     });
   }
 });
+
+// 封装一个检查封禁状态的辅助函数
+function checkBanStatus(userPerms, action) {
+  if (!userPerms || !userPerms[action]) return false;
+  const perm = userPerms[action];
+  if (perm === 'permanent') return true;
+  // 检查是否在封禁期限内
+  const banUntil = new Date(perm);
+  const now = new Date();
+  if (banUntil > now) return true;
+  return false;
+}
 
 // 获取宠物列表数据（从真实 MySQL 数据库查询）
 app.get("/api/pets", async (req, res) => {
@@ -261,6 +365,17 @@ app.post("/api/pets", async (req, res) => {
     const { url, nickname, category, breed, age, gender, location, latitude, longitude, tags, health, status, desc, swiperList } = req.body;
     const publisherId = req.headers["x-wx-openid"] || 'mock_user_id'; // 当前用户ID作为发布者
     
+    // 查询当前用户权限
+    const user = await User.findOne({ where: { openid: publisherId } });
+    if (user && user.permissions) {
+      if (checkBanStatus(user.permissions, 'ban_account')) {
+        return res.status(403).json({ code: 403, message: '您的账号已被封禁，无法发布送养信息' });
+      }
+      if (checkBanStatus(user.permissions, 'ban_publish')) {
+        return res.status(403).json({ code: 403, message: '您的账号被禁止发布送养信息' });
+      }
+    }
+
     // 如果年龄没传，默认设置为“未知”
     const finalAge = age || '未知';
 
@@ -445,6 +560,13 @@ app.post("/api/collects", async (req, res) => {
   try {
     const { petId } = req.body;
     const userId = req.headers["x-wx-openid"] || 'mock_user_id';
+
+    const user = await User.findOne({ where: { openid: userId } });
+    if (user && user.permissions) {
+      if (checkBanStatus(user.permissions, 'ban_account')) {
+        return res.status(403).json({ code: 403, message: '您的账号已被封禁，无法操作' });
+      }
+    }
 
     if (!petId) {
       return res.status(400).json({ code: 400, message: 'petId 不能为空' });
