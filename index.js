@@ -51,6 +51,15 @@ app.get("/api/wx_openid", async (req, res) => {
 
 // ---------------- 用户信息相关接口 ----------------
 
+function generateAccountId() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let accountId = '';
+  for (let i = 0; i < 8; i++) {
+    accountId += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return accountId;
+}
+
 // 获取个人信息
 app.get("/api/user/info", async (req, res) => {
   try {
@@ -58,12 +67,8 @@ app.get("/api/user/info", async (req, res) => {
     let user = await User.findOne({ where: { openid } });
     
     if (!user) {
-      // 如果没有，则创建默认用户
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-      let accountId = '';
-      for (let i = 0; i < 8; i++) {
-        accountId += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
+      // 如果没有，则创建默认用户，生成唯一的 accountId
+      const accountId = generateAccountId();
       user = await User.create({
         openid,
         accountId,
@@ -99,14 +104,15 @@ app.post("/api/user/info", async (req, res) => {
     const openid = req.headers["x-wx-openid"] || 'mock_user_id';
     const { nickname, avatarUrl, gender, birth, address, introduction } = req.body;
     
-    const [user, created] = await User.findOrCreate({
-      where: { openid },
-      defaults: {
-        accountId: 'u_' + Date.now(),
+    let user = await User.findOne({ where: { openid } });
+    if (!user) {
+      user = await User.create({
+        openid,
+        accountId: generateAccountId(),
         nickname: nickname || '微信用户',
         avatarUrl: avatarUrl || ''
-      }
-    });
+      });
+    }
 
     await user.update({
       nickname: nickname !== undefined ? nickname : user.nickname,
@@ -133,6 +139,31 @@ app.post("/api/user/info", async (req, res) => {
     });
   } catch (error) {
     console.error("更新用户信息失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误' });
+  }
+});
+
+// 注销个人账号
+app.delete("/api/user/account", async (req, res) => {
+  try {
+    const openid = req.headers["x-wx-openid"] || 'mock_user_id';
+    
+    // 1. 删除用户记录
+    const deletedUserCount = await User.destroy({ where: { openid } });
+    if (deletedUserCount === 0) {
+      return res.status(404).json({ code: 404, message: '账号不存在或已注销' });
+    }
+
+    // 2. 这里可以根据业务需求决定是否级联删除用户发布的宠物和收藏
+    // 比如：
+    // await Pet.destroy({ where: { publisherId: openid } }); // 但需要注意我们的 publisherId 存的是 accountId
+    
+    res.json({
+      code: 200,
+      message: '账号注销成功'
+    });
+  } catch (error) {
+    console.error("账号注销失败:", error);
     res.status(500).json({ code: 500, message: '服务器错误' });
   }
 });
