@@ -306,6 +306,31 @@ app.get("/api/pets/:id", async (req, res) => {
   }
 });
 
+// 更新宠物信息 (如状态)
+app.put("/api/pets/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    // const userId = req.headers["x-wx-openid"] || 'mock_user_id'; // 如果需要验证权限可以在这里加
+    
+    const pet = await Pet.findByPk(id);
+    if (!pet) {
+      return res.status(404).json({ code: 404, message: '未找到该宠物' });
+    }
+
+    await pet.update(updateData);
+
+    res.json({
+      code: 200,
+      message: '更新成功',
+      data: pet
+    });
+  } catch (error) {
+    console.error("更新宠物失败:", error);
+    res.status(500).json({ code: 500, message: '服务器错误', error: error.message });
+  }
+});
+
 // 删除单个宠物接口
 app.delete("/api/pets/:id", async (req, res) => {
   try {
