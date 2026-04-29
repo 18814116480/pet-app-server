@@ -227,14 +227,14 @@ app.get("/api/pets", async (req, res) => {
 // 发布宠物接口（写入 MySQL 数据库）
 app.post("/api/pets", async (req, res) => {
   try {
-    const { url, nickname, breed, age, gender, location, tags, health, status, desc, swiperList } = req.body;
+    const { url, nickname, category, breed, age, gender, location, tags, health, status, desc, swiperList } = req.body;
     const publisherId = req.headers["x-wx-openid"] || 'mock_user_id'; // 当前用户ID作为发布者
     
     // 简单的参数校验
-    if (!nickname || !breed || !age) {
+    if (!nickname || !breed || !age || !category) {
       return res.status(400).json({
         code: 400,
-        message: '昵称、品种、年龄为必填项'
+        message: '昵称、分类、品种、年龄为必填项'
       });
     }
 
@@ -243,6 +243,7 @@ app.post("/api/pets", async (req, res) => {
       url: url || 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80', // 默认图片
       swiperList: swiperList || [url], // 如果前端传了轮播图数组就存下来
       nickname,
+      category,
       breed,
       age,
       gender: gender || 'unknown',

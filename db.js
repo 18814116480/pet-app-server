@@ -25,6 +25,7 @@ const Pet = sequelize.define("Pet", {
   // id: Sequelize 默认自动创建主键 id (INTEGER, Auto Increment)
   url: { type: DataTypes.STRING, allowNull: false, comment: '封面图片' },
   swiperList: { type: DataTypes.JSON, allowNull: true, comment: '轮播图列表' },
+  category: { type: DataTypes.STRING, allowNull: true, comment: '分类(猫猫/狗狗/宠物)' },
   nickname: { type: DataTypes.STRING, allowNull: false, comment: '昵称' },
   breed: { type: DataTypes.STRING, allowNull: false, comment: '品种' },
   age: { type: DataTypes.STRING, allowNull: false, comment: '年龄' },
