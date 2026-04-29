@@ -171,34 +171,10 @@ app.get("/api/pets", async (req, res) => {
     
     // 如果数据库里一条数据都没有，自动插入几条测试数据以便我们看到效果
     if (pets.length === 0) {
-      const mockData = [
-        {
-          url: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
-          nickname: '小花',
-          breed: '中华田园猫',
-          age: '3个月',
-          gender: 'female',
-          location: '四川省成都市武侯区人民南路',
-          tags: ['活泼好动', '亲人'],
-          status: '寻找中'
-        },
-        {
-          url: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
-          nickname: '旺财',
-          breed: '金毛',
-          age: '1岁',
-          gender: 'male',
-          location: '四川省成都市武侯区天府大道1号',
-          tags: ['看家护院', '忠诚'],
-          status: '寻找中'
-        }
-      ];
-      await Pet.bulkCreate(mockData);
-      const newPets = await Pet.findAll({ order: [['createdAt', 'DESC']] });
       return res.json({
         code: 200,
-        message: '请求成功 (新初始化的数据)',
-        data: newPets
+        message: '请求成功',
+        data: []
       });
     }
 
@@ -261,10 +237,12 @@ app.post("/api/pets", async (req, res) => {
   }
 });
 
-// 获取我的发布接口 (暂时查所有，后续可根据 openid 或 userid 过滤)
+// 获取我的发布接口
 app.get("/api/pets/my", async (req, res) => {
   try {
+    const publisherId = req.headers["x-wx-openid"] || 'mock_user_id';
     const pets = await Pet.findAll({
+      where: { publisherId },
       order: [['createdAt', 'DESC']]
     });
 
@@ -458,6 +436,18 @@ const port = process.env.PORT || 80;
 
 async function bootstrap() {
   await initDB();
+  
+  // 清理之前插入的假宠物数据
+  try {
+    await Pet.destroy({
+      where: {
+        nickname: ['小花', '旺财']
+      }
+    });
+  } catch (err) {
+    console.error('清理假数据失败', err);
+  }
+
   app.listen(port, () => {
     console.log("启动成功", port);
   });
