@@ -195,7 +195,14 @@ app.get("/api/home/swipers", async (req, res) => {
 // 获取宠物列表数据（从真实 MySQL 数据库查询）
 app.get("/api/pets", async (req, res) => {
   try {
+    const { publisherId } = req.query;
+    const where = {};
+    if (publisherId) {
+      where.publisherId = publisherId;
+    }
+
     const pets = await Pet.findAll({
+      where,
       order: [['createdAt', 'DESC']],
       include: [{ model: User }] // 关联查询发布者信息
     });
@@ -230,11 +237,14 @@ app.post("/api/pets", async (req, res) => {
     const { url, nickname, category, breed, age, gender, location, latitude, longitude, tags, health, status, desc, swiperList } = req.body;
     const publisherId = req.headers["x-wx-openid"] || 'mock_user_id'; // 当前用户ID作为发布者
     
+    // 如果年龄没传，默认设置为“未知”
+    const finalAge = age || '未知';
+
     // 简单的参数校验
-    if (!nickname || !breed || !age || !category) {
+    if (!nickname || !breed || !category) {
       return res.status(400).json({
         code: 400,
-        message: '昵称、分类、品种、年龄为必填项'
+        message: '昵称、分类、品种为必填项'
       });
     }
 
@@ -245,7 +255,7 @@ app.post("/api/pets", async (req, res) => {
       nickname,
       category,
       breed,
-      age,
+      age: finalAge,
       gender: gender || 'unknown',
       location: location || '未知位置',
       latitude,
