@@ -35,6 +35,11 @@ const Pet = sequelize.define("Pet", {
     allowNull: true,
     comment: '标签' 
   },
+  health: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: '健康状态'
+  },
   status: { type: DataTypes.STRING, allowNull: false, defaultValue: '寻找中', comment: '状态' },
   desc: { type: DataTypes.TEXT, allowNull: true, comment: '描述信息' }
 });

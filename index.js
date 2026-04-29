@@ -196,7 +196,7 @@ app.get("/api/pets", async (req, res) => {
 // 发布宠物接口（写入 MySQL 数据库）
 app.post("/api/pets", async (req, res) => {
   try {
-    const { url, nickname, breed, age, gender, location, tags, status, desc, swiperList } = req.body;
+    const { url, nickname, breed, age, gender, location, tags, health, status, desc, swiperList } = req.body;
     const publisherId = req.headers["x-wx-openid"] || 'mock_user_id'; // 当前用户ID作为发布者
     
     // 简单的参数校验
@@ -217,6 +217,7 @@ app.post("/api/pets", async (req, res) => {
       gender: gender || 'unknown',
       location: location || '未知位置',
       tags: tags || [],
+      health: health || ['未打疫苗', '未驱虫', '未绝育'],
       status: status || '寻找中',
       desc: desc || '',
       publisherId
