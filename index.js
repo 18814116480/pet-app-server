@@ -267,7 +267,9 @@ app.get("/api/pets/:id", async (req, res) => {
     const { id } = req.params;
     const userId = req.headers["x-wx-openid"] || 'mock_user_id'; // 获取当前用户ID
 
-    const pet = await Pet.findByPk(id);
+    const pet = await Pet.findByPk(id, {
+      include: [{ model: User }] // 关联查询发布者信息
+    });
 
     if (!pet) {
       return res.status(404).json({
