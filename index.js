@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 const { init: initDB, Counter, Pet, Collect, User } = require("./db");
+const { Sequelize, Op } = require("sequelize");
 
 const logger = morgan("tiny");
 
@@ -198,7 +199,16 @@ app.get("/api/pets", async (req, res) => {
     const { publisherId } = req.query;
     const where = {};
     if (publisherId) {
-      where.publisherId = publisherId;
+      // 检查 publisherId 是否是 accountId
+      const user = await User.findOne({ where: { accountId: publisherId } });
+      if (user) {
+        // 兼容之前可能用 accountId 存入 Pet 的旧数据
+        where.publisherId = {
+          [Op.or]: [user.openid, publisherId]
+        };
+      } else {
+        where.publisherId = publisherId;
+      }
     }
 
     const pets = await Pet.findAll({
@@ -286,8 +296,15 @@ app.post("/api/pets", async (req, res) => {
 app.get("/api/pets/my", async (req, res) => {
   try {
     const publisherId = req.headers["x-wx-openid"] || 'mock_user_id';
+    
+    // 查询我的时，也要把以 accountId 错误保存的数据找回来
+    const user = await User.findOne({ where: { openid: publisherId } });
+    const queryWhere = {
+      publisherId: user ? { [Op.or]: [publisherId, user.accountId] } : publisherId
+    };
+
     const pets = await Pet.findAll({
-      where: { publisherId },
+      where: queryWhere,
       order: [['createdAt', 'DESC']]
     });
 
