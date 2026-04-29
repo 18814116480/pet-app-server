@@ -104,6 +104,47 @@ app.get("/api/pets", async (req, res) => {
   }
 });
 
+// 发布宠物接口（写入 MySQL 数据库）
+app.post("/api/pets", async (req, res) => {
+  try {
+    const { url, nickname, breed, age, gender, location, tags, status, desc } = req.body;
+    
+    // 简单的参数校验
+    if (!nickname || !breed || !age) {
+      return res.status(400).json({
+        code: 400,
+        message: '昵称、品种、年龄为必填项'
+      });
+    }
+
+    // 在数据库中创建新宠物记录
+    const newPet = await Pet.create({
+      url: url || 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80', // 默认图片
+      nickname,
+      breed,
+      age,
+      gender: gender || 'unknown',
+      location: location || '未知位置',
+      tags: tags || [],
+      status: status || '寻找中',
+      desc: desc || ''
+    });
+
+    res.json({
+      code: 200,
+      message: '发布成功',
+      data: newPet
+    });
+  } catch (error) {
+    console.error("发布宠物失败:", error);
+    res.status(500).json({
+      code: 500,
+      message: '发布失败，服务器错误',
+      error: error.message
+    });
+  }
+});
+
 const port = process.env.PORT || 80;
 
 async function bootstrap() {

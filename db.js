@@ -35,6 +35,7 @@ const Pet = sequelize.define("Pet", {
     comment: '标签' 
   },
   status: { type: DataTypes.STRING, allowNull: false, defaultValue: '寻找中', comment: '状态' },
+  desc: { type: DataTypes.TEXT, allowNull: true, comment: '描述信息' }
 });
 
 // 数据库初始化方法
