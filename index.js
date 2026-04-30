@@ -356,6 +356,32 @@ setTimeout(async () => {
       await Collect.destroy({ where: { petId: orphanPetIds } });
       console.log(`[自动清理] 容器启动时已批量删除孤儿宠物及关联数据，数量: ${orphanPetIds.length}`);
     }
+
+    // 修复消息表中可能的 openid 到 accountId 的错误映射
+    const allMessages = await Message.findAll();
+    for (const msg of allMessages) {
+      let needsUpdate = false;
+      let newSenderId = msg.senderId;
+      let newReceiverId = msg.receiverId;
+      
+      const senderUser = allUsers.find(u => u.openid === msg.senderId);
+      if (senderUser && senderUser.accountId) {
+        newSenderId = senderUser.accountId;
+        needsUpdate = true;
+      }
+      
+      const receiverUser = allUsers.find(u => u.openid === msg.receiverId);
+      if (receiverUser && receiverUser.accountId) {
+        newReceiverId = receiverUser.accountId;
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        await Message.update({ senderId: newSenderId, receiverId: newReceiverId }, { where: { id: msg.id } });
+        console.log(`[自动修复] 消息 ${msg.id} 发送/接收者已修复为 accountId`);
+      }
+    }
+
   } catch(err) {
     console.error("启动时维护数据失败:", err);
   }
@@ -688,8 +714,16 @@ app.get("/api/collects/my", async (req, res) => {
 app.get("/api/chat/sessions", async (req, res) => {
   try {
     const openid = req.headers["x-wx-openid"] || 'mock_user_id';
-    const user = await User.findOne({ where: { openid } });
-    if (!user) return res.status(404).json({ code: 404, message: '用户不存在' });
+    let user = await User.findOne({ where: { openid } });
+    if (!user) {
+      const accountId = generateAccountId();
+      user = await User.create({
+        openid,
+        accountId,
+        nickname: '微信用户',
+        avatarUrl: 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'
+      });
+    }
 
     const myId = user.accountId;
 
@@ -726,9 +760,14 @@ app.get("/api/chat/sessions", async (req, res) => {
     // 填充对方的用户信息
     const sessions = Object.values(sessionsMap);
     for (const session of sessions) {
-      const targetUser = await User.findOne({ where: { accountId: session.userId } });
-      session.name = targetUser ? (targetUser.nickname || '微信用户') : '未知用户';
-      session.avatar = targetUser ? targetUser.avatarUrl : '/static/avatar1.png';
+      if (session.userId === 'system_cs') {
+        session.name = '官方客服';
+        session.avatar = '/static/chat/cs-blue.svg';
+      } else {
+        const targetUser = await User.findOne({ where: { accountId: session.userId } });
+        session.name = targetUser ? (targetUser.nickname || '微信用户') : '未知用户';
+        session.avatar = targetUser ? targetUser.avatarUrl : '/static/avatar1.png';
+      }
       
       // 置顶状态应该由专门的设置表管理，这里为了快速兼容先默认 false
       session.isPinned = false; 
@@ -752,8 +791,16 @@ app.get("/api/chat/sessions", async (req, res) => {
 app.post("/api/chat/messages", async (req, res) => {
   try {
     const openid = req.headers["x-wx-openid"] || 'mock_user_id';
-    const sender = await User.findOne({ where: { openid } });
-    if (!sender) return res.status(404).json({ code: 404, message: '用户不存在' });
+    let sender = await User.findOne({ where: { openid } });
+    if (!sender) {
+      const accountId = generateAccountId();
+      sender = await User.create({
+        openid,
+        accountId,
+        nickname: '微信用户',
+        avatarUrl: 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'
+      });
+    }
 
     // 检查发送者是否被封禁账号
     if (sender.permissions && checkBanStatus(sender.permissions, 'ban_account')) {
