@@ -816,9 +816,20 @@ app.post("/api/chat/messages", async (req, res) => {
       return res.status(400).json({ code: 400, message: '缺少参数' });
     }
 
+    // 将 receiverId 统一转换为 accountId，防止因为传入 openid 导致接收方查不到消息
+    let finalReceiverId = receiverId;
+    const receiverUser = await User.findOne({ 
+      where: { 
+        [Op.or]: [{ accountId: receiverId }, { openid: receiverId }] 
+      } 
+    });
+    if (receiverUser && receiverUser.accountId) {
+      finalReceiverId = receiverUser.accountId;
+    }
+
     const newMessage = await Message.create({
       senderId: sender.accountId,
-      receiverId,
+      receiverId: finalReceiverId,
       content,
       msgType: msgType || 'text',
       payload: payload || null,
@@ -851,13 +862,22 @@ app.put("/api/chat/messages/read/:targetId", async (req, res) => {
     if (!user) return res.status(404).json({ code: 404, message: '用户不存在' });
 
     const { targetId } = req.params;
+    let finalTargetId = targetId;
+    const targetUser = await User.findOne({ 
+      where: { 
+        [Op.or]: [{ accountId: targetId }, { openid: targetId }] 
+      } 
+    });
+    if (targetUser && targetUser.accountId) {
+      finalTargetId = targetUser.accountId;
+    }
 
     // 把 targetId 发给我 (user.accountId) 的消息标记为已读
     await Message.update(
       { isRead: true },
       {
         where: {
-          senderId: targetId,
+          senderId: finalTargetId,
           receiverId: user.accountId,
           isRead: false
         }
@@ -881,11 +901,21 @@ app.delete("/api/chat/sessions/:targetId", async (req, res) => {
     const { targetId } = req.params;
     const myId = user.accountId;
 
+    let finalTargetId = targetId;
+    const targetUser = await User.findOne({ 
+      where: { 
+        [Op.or]: [{ accountId: targetId }, { openid: targetId }] 
+      } 
+    });
+    if (targetUser && targetUser.accountId) {
+      finalTargetId = targetUser.accountId;
+    }
+
     await Message.destroy({
       where: {
         [Op.or]: [
-          { senderId: myId, receiverId: targetId },
-          { senderId: targetId, receiverId: myId }
+          { senderId: myId, receiverId: finalTargetId },
+          { senderId: finalTargetId, receiverId: myId }
         ]
       }
     });
