@@ -87,11 +87,11 @@ Collect.belongsTo(Pet, { foreignKey: 'petId' });
 User.hasMany(Pet, { foreignKey: 'publisherId', sourceKey: 'openid' });
 Pet.belongsTo(User, { foreignKey: 'publisherId', targetKey: 'openid' });
 
-// 建立消息和用户的关联
-User.hasMany(Message, { foreignKey: 'senderId', sourceKey: 'accountId', as: 'SentMessages' });
-User.hasMany(Message, { foreignKey: 'receiverId', sourceKey: 'accountId', as: 'ReceivedMessages' });
-Message.belongsTo(User, { foreignKey: 'senderId', targetKey: 'accountId', as: 'Sender' });
-Message.belongsTo(User, { foreignKey: 'receiverId', targetKey: 'accountId', as: 'Receiver' });
+// 建立消息和用户的关联 (取消外键约束以支持 system_cs 或遗留数据的消息发送)
+User.hasMany(Message, { foreignKey: 'senderId', sourceKey: 'accountId', as: 'SentMessages', constraints: false });
+User.hasMany(Message, { foreignKey: 'receiverId', sourceKey: 'accountId', as: 'ReceivedMessages', constraints: false });
+Message.belongsTo(User, { foreignKey: 'senderId', targetKey: 'accountId', as: 'Sender', constraints: false });
+Message.belongsTo(User, { foreignKey: 'receiverId', targetKey: 'accountId', as: 'Receiver', constraints: false });
 
 // 数据库初始化方法
 async function init() {

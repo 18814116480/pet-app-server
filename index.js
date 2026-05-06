@@ -288,6 +288,9 @@ app.post("/api/admin/users/:accountId/permissions", async (req, res) => {
     res.status(500).json({ code: 500, message: '服务器错误' });
   }
 });
+
+// 获取首页轮播图
+app.get("/api/home/swipers", async (req, res) => {
   try {
     // 这里简单起见，我们返回静态配置的轮播图。
     // 后续你也可以在 MySQL 里新建一张 Swiper 表来管理它们。
@@ -931,6 +934,18 @@ const port = process.env.PORT || 80;
 
 async function bootstrap() {
   await initDB();
+  
+  // 确保系统客服存在
+  const csExists = await User.findOne({ where: { accountId: 'system_cs' } });
+  if (!csExists) {
+    await User.create({
+      openid: 'system_cs_openid',
+      accountId: 'system_cs',
+      nickname: '官方客服',
+      role: 'admin',
+      avatarUrl: '/static/chat/cs-blue.svg'
+    });
+  }
   
   // 清理之前插入的假宠物数据
   try {
